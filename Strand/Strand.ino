@@ -1,4 +1,4 @@
-s.  #include <Adafruit_NeoPixel.h>
+#include <Adafruit_NeoPixel.h>
 // pin 2 sur data in
 // gnd arduino sur gnd strand
 
