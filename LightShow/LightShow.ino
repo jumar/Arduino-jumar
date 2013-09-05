@@ -27,12 +27,20 @@
 //timeout in ms before shuting down
 #define NO_MVT_SHUTDOWN_DELAY 30000
 
+//brightness of strand during light show
+#define HI_BRIGHTNESS 255
+//brightness of strand during standby mode
+#define LO_BRIGHTNESS 16
+
+#define NB_SHOW 6
+
 volatile int sndState = LOW; 
 volatile int PIRState = LOW;
 volatile int PIRVal = 0;
 volatile unsigned long lastPIRTime = 0;
 volatile int sndCounter = 0;
 volatile int showType = 0;
+volatile boolean _break = false;
 
 #define SHUTDOWN 0
 #define SLEEP 1
@@ -40,8 +48,6 @@ volatile int showType = 0;
 
 int state = SHUTDOWN;
 int ledState = LOW;
-int lastSoundCount = 0;
-
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(149, STRAND_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -61,6 +67,13 @@ void setup()
 
 void loop()
 {
+  // check for sound
+  if(sndCounter != 0)
+  {
+    //We had sound -> change show type
+    showType++;
+    sndCounter = 0;
+  }
   switch(state)
   {
     default:
@@ -69,7 +82,7 @@ void loop()
       digitalWrite(LED, LOW);
     break;
     case SLEEP:
-      strip.setBrightness(64);
+      strip.setBrightness(LO_BRIGHTNESS);
       strip.show();
       //blink the LED
       ledState = !ledState;
@@ -77,28 +90,41 @@ void loop()
       delay(800);
     break;
     case LIGHTSHOW:
-      strip.setBrightness(255);
+      strip.setBrightness(HI_BRIGHTNESS);
       strip.show();
-      switch(showType%4)
+      //showType = 3;
+      switch(showType%(NB_SHOW+1))
       {
         default:
         case 0:
-          colorWipe(strip.Color(255, 0, 0), 25, false); // Red
-          colorWipe(strip.Color(0, 0, 0), 25, true);
+          if(colorWipe(strip.Color(0, 0, 255), 25, false)) // Blue
+            colorWipe(strip.Color(0, 0, 0), 25, true);
           break;
         case 1:
-          colorWipe(strip.Color(0, 255, 0), 25, false); // Green
-          colorWipe(strip.Color(0, 0, 0), 25, true);
+          rainbow(40);
           break;
         case 2:
-          colorWipe(strip.Color(0, 0, 255), 25, false); // Blue
-          colorWipe(strip.Color(0, 0, 0), 25, true);
+          if(colorWipe(strip.Color(255, 0, 0), 25, false)) // Red
+            colorWipe(strip.Color(0, 0, 0), 25, true);
           break;
         case 3:
-          rainbow(10);
+          if(colorFull(Wheel(50), 1000))
+            if(colorFull(Wheel(150), 1000))
+              if(colorFull(Wheel(200), 1000))
+                colorFull(Wheel(250), 1000);
           break;
         case 4:
-          rainbowCycle(10);
+          if(colorWipe(strip.Color(0, 255, 0), 25, false)) // Green
+            colorWipe(strip.Color(0, 0, 0), 25, true);
+          break;
+        case 5:
+          rainbowCycle(40);
+          break;
+        case 6:
+          if(colorFull(Wheel(10), 200))
+            if(colorFull(Wheel(57), 200))
+              if(colorFull(Wheel(123), 200))
+                colorFull(Wheel(213), 200);
           break;
       }
     break;
@@ -137,6 +163,8 @@ void sound()
   //Serial.println("Sound !");
   //change light-show type
   sndCounter++;
+  _break = true;
+  timerCallback();
 }
 
 
@@ -169,13 +197,6 @@ void timerCallback()
       state = LIGHTSHOW;
     }
   }
-  // check for sound
-  if(lastSoundCount != sndCounter)
-  {
-    //We had sound -> change show type
-    showType++;
-    lastSoundCount = sndCounter;
-  }
 }
 
 //Set givn color to all leds
@@ -188,12 +209,37 @@ void setColor(uint32_t c)
 }
 
 // Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait, boolean reverse) {
+boolean colorWipe(uint32_t c, uint8_t wait, boolean reverse) {
   for(uint16_t i=0; i<strip.numPixels(); i++) {
       strip.setPixelColor(reverse?strip.numPixels()-i:i, c);
       strip.show();
       delay(wait);
+      if(_break)
+      {
+        _break = false;
+        return false;
+      }
   }
+  return true;
+}
+
+boolean colorFull(uint32_t c, unsigned long wait) {
+  for(uint16_t i=0; i<strip.numPixels(); i++) {
+      strip.setPixelColor(i, c);
+  }
+  strip.show();
+  unsigned long start = millis();
+  do
+  {
+    delay(1);
+    if(_break)
+    {
+      _break = false;
+      return false;
+    }
+  }
+  while(millis()-start<wait);
+  return true;
 }
 
 void rainbow(uint8_t wait) {
@@ -205,6 +251,11 @@ void rainbow(uint8_t wait) {
     }
     strip.show();
     delay(wait);
+    if(_break)
+    {
+      _break = false;
+      break;
+    }
   }
 }
 
@@ -218,6 +269,11 @@ void rainbowCycle(uint8_t wait) {
     }
     strip.show();
     delay(wait);
+    if(_break)
+    {
+      _break = false;
+      break;
+    }
   }
 }
 
